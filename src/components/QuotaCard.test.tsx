@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CSSProperties } from "react";
 import type { ProviderSnapshot, WidgetPreferences } from "../types";
 import { orbCornerRadiusForSize, widgetScaleForSize } from "../lib/render";
 import { QuotaCard, QuotaOrb } from "./QuotaCard";
@@ -9,6 +10,7 @@ const snapshot: ProviderSnapshot = {
   provider: "codex",
   displayName: "CODEX",
   plan: "PRO",
+  quotaHistoryScope: "test-scope",
   shortWindow: { remainingPercent: 69, resetsAt: null, windowSeconds: 18_000 },
   weeklyWindow: null,
   resetCredits: 0,
@@ -88,6 +90,15 @@ describe("QuotaOrb drag and click gestures", () => {
     expect(orb.className).toContain("quota-orb--glass-liquid");
     expect(orb.className).toContain("quota-orb--native-glass");
     expect(orb.style.getPropertyValue("--orb-corner-radius")).toBe(`${orbCornerRadiusForSize(72, 1)}px`);
+  });
+
+  it("shrinks only the computer orb metric at 100%", () => {
+    const fullSnapshot = { ...snapshot, shortWindow: { ...snapshot.shortWindow!, remainingPercent: 100 } };
+    const { rerender } = render(<QuotaOrb snapshot={fullSnapshot} onDrag={vi.fn()} onExpand={vi.fn()} skin="computer" />);
+    expect(screen.getByRole("button").className).toContain("quota-orb--computer-full");
+
+    rerender(<QuotaOrb snapshot={{ ...fullSnapshot, shortWindow: { ...fullSnapshot.shortWindow!, remainingPercent: 99 } }} onDrag={vi.fn()} onExpand={vi.fn()} skin="computer" />);
+    expect(screen.getByRole("button").className).not.toContain("quota-orb--computer-full");
   });
   it.each(resizeGestures)("keeps %s resize monotonic and preserves its edge priority", async (_name, edge, gesture) => {
     vi.useFakeTimers();
@@ -490,9 +501,155 @@ it("applies the Glass skin to the card without changing its shape classes", () =
   expect(card.style.borderRadius).toBe("");
 });
 
+it("keeps the Pro 5x header compact for legacy and current plan labels", () => {
+  const { container, rerender } = render(
+    <QuotaCard
+      snapshot={{ ...snapshot, plan: "PRO 5X" }}
+      preferences={preferences}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="nw"
+      onDrag={vi.fn()}
+    />,
+  );
+  expect(container.querySelector(".eyebrow")?.textContent).toBe("CODEX · PRO 5X");
+
+  rerender(
+    <QuotaCard
+      snapshot={{ ...snapshot, plan: "PRO LITE" }}
+      preferences={preferences}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="nw"
+      onDrag={vi.fn()}
+    />,
+  );
+  expect(container.querySelector(".eyebrow")?.textContent).toBe("CODEX · PRO 5X");
+});
+
+it("keeps the selected Pro 5x label on the computer skin", () => {
+  const { container } = render(
+    <QuotaCard
+      snapshot={{ ...snapshot, plan: "PRO 5X" }}
+      preferences={preferences}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="nw"
+      onDrag={vi.fn()}
+      skin="computer"
+    />,
+  );
+  expect(container.querySelector(".eyebrow")?.textContent).toBe("CODEX · PRO 5X");
+});
+
+it("uses the same compact fallback when a computer-like snapshot has no plan", () => {
+  const { container } = render(
+    <QuotaCard
+      snapshot={{ ...snapshot, plan: null }}
+      preferences={preferences}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="nw"
+      onDrag={vi.fn()}
+      skin="computer"
+    />,
+  );
+  expect(container.querySelector(".eyebrow")?.textContent).toBe("CODEX · PLUS");
+});
+
+it("uses snapshot.plan in the Walkman compact brand", () => {
+  render(<QuotaOrb snapshot={{ ...snapshot, plan: "PRO 5X" }} onDrag={vi.fn()} onExpand={vi.fn()} skin="walkman" />);
+  expect(document.querySelector(".walkman-orb-brand")?.textContent).toBe("CODEX · PRO 5X");
+});
+
+it("applies the Walkman skin to both expanded and compact widgets", () => {
+  const props = {
+    snapshot,
+    preferences,
+    providerCount: 1,
+    onPrevious: vi.fn(),
+    onNext: vi.fn(),
+    onTogglePin: vi.fn(),
+    onLock: vi.fn(),
+    onCollapse: vi.fn(),
+    toggleCorner: "ne" as const,
+    onDrag: vi.fn(),
+  };
+  const { unmount } = render(<QuotaCard {...props} skin="walkman" />);
+  expect(screen.getByRole("main").className).toContain("quota-card--skin-walkman");
+  expect(document.querySelector(".walkman-tape-window")).not.toBeNull();
+  expect(document.querySelector(".walkman-tape-level")).not.toBeNull();
+  expect(document.querySelector(".walkman-wordmark")?.textContent).toBe("WALKMAN");
+  unmount();
+  render(<QuotaOrb snapshot={snapshot} onDrag={vi.fn()} onExpand={vi.fn()} skin="walkman" />);
+  expect(screen.getByRole("button").className).toContain("quota-orb--skin-walkman");
+  expect(document.querySelector(".walkman-orb-base")).not.toBeNull();
+  expect(document.querySelector(".walkman-tape-window--compact")).not.toBeNull();
+  expect(document.querySelector(".walkman-orb-brand")?.textContent).toBe("CODEX · PRO");
+});
+
+it("keeps the Walkman card shell width driven by the compact widget size", () => {
+  render(
+    <QuotaCard
+      snapshot={snapshot}
+      preferences={preferences}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="ne"
+      onDrag={vi.fn()}
+      skin="walkman"
+      style={{ "--walkman-card-shell-width": "84%" } as CSSProperties}
+    />,
+  );
+  expect(screen.getByRole("main").style.getPropertyValue("--walkman-card-shell-width")).toBe("84%");
+});
+
+it("formats the Walkman reset readout from the active window", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-18T00:00:00Z"));
+  render(
+    <QuotaCard
+      snapshot={{ ...snapshot, shortWindow: { ...snapshot.shortWindow!, resetsAt: "2026-08-20T00:00:00Z" } }}
+      preferences={{ ...preferences, language: "en" }}
+      providerCount={1}
+      onPrevious={vi.fn()}
+      onNext={vi.fn()}
+      onTogglePin={vi.fn()}
+      onLock={vi.fn()}
+      onCollapse={vi.fn()}
+      toggleCorner="ne"
+      onDrag={vi.fn()}
+      skin="walkman"
+    />,
+  );
+  expect(screen.getByText("Reset 2d")).toBeTruthy();
+  expect(screen.getByText("Aug 20")).toBeTruthy();
+  vi.useRealTimers();
+});
+
 describe("QuotaCard resize gestures", () => {
   it("renders the quota forecast directly below the reset time", () => {
-    render(
+    const { container } = render(
       <QuotaCard
         snapshot={{ ...snapshot, shortWindow: { ...snapshot.shortWindow!, resetsAt: "2026-08-20T12:00:00Z" } }}
         preferences={preferences}
@@ -507,13 +664,81 @@ describe("QuotaCard resize gestures", () => {
         prediction={{ historyDays: 7, averageDailyUsagePercent: 10, daysAtAverage: 4.2, daysUntilReset: 3, recommendedDailyPercent: 16.7 }}
       />,
     );
-    const resetTime = screen.getByText(/resets in|Reset time unknown/);
+    const resetTime = container.querySelector(".reset-time");
     const forecast = screen.getByLabelText("Quota forecast");
-    expect(resetTime.nextElementSibling).toBe(forecast);
-    expect(forecast.textContent).toContain("Remaining quota can last 4.2 days");
-    expect(forecast.textContent).toContain("Recommended daily usage: 16.7%");
+    expect(resetTime).toBeTruthy();
+    expect(resetTime?.nextElementSibling).toBe(forecast);
+    expect(forecast.textContent).toContain("Can last 4.2 days");
+    expect(forecast.textContent).toContain(" · ");
+    expect(forecast.textContent).toContain("Use 16.7 % / day");
+    expect(forecast.querySelectorAll("p")).toHaveLength(1);
     expect(screen.getByText("4.2").className).toContain("quota-forecast-value");
     expect(screen.getByText("16.7").className).toContain("quota-forecast-value");
+  });
+
+  it("shows placeholders instead of the reset horizon without history", () => {
+    render(
+      <QuotaCard
+        snapshot={{ ...snapshot, shortWindow: { ...snapshot.shortWindow!, resetsAt: "2026-08-20T12:00:00Z" } }}
+        preferences={preferences}
+        providerCount={1}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onTogglePin={vi.fn()}
+        onLock={vi.fn()}
+        onCollapse={vi.fn()}
+        toggleCorner="nw"
+        onDrag={vi.fn()}
+        prediction={{ historyDays: 1, averageDailyUsagePercent: null, daysAtAverage: null, daysUntilReset: 3, recommendedDailyPercent: null }}
+      />,
+    );
+
+    const forecast = screen.getByLabelText("Quota forecast");
+    expect(forecast.textContent).toContain("Can last — days");
+    expect(forecast.textContent).toContain(" · ");
+    expect(forecast.textContent).toContain("Use — % / day");
+    expect(forecast.querySelectorAll("p")).toHaveLength(1);
+    expect(forecast.querySelectorAll(".quota-forecast-value")).toHaveLength(2);
+  });
+
+  it("shows forecast placeholders when the account scope is unavailable", () => {
+    render(
+      <QuotaCard
+        snapshot={{ ...snapshot, quotaHistoryScope: null }}
+        preferences={preferences}
+        providerCount={1}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onTogglePin={vi.fn()}
+        onLock={vi.fn()}
+        onCollapse={vi.fn()}
+        toggleCorner="nw"
+        onDrag={vi.fn()}
+        prediction={{ historyDays: 0, averageDailyUsagePercent: null, daysAtAverage: null, daysUntilReset: null, recommendedDailyPercent: null }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Quota forecast").textContent).toBe("Can last — days · Use — % / day");
+  });
+
+  it("uses the compact Chinese forecast wording for the shared card layout", () => {
+    render(
+      <QuotaCard
+        snapshot={snapshot}
+        preferences={{ ...preferences, language: "zh-CN" }}
+        providerCount={1}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onTogglePin={vi.fn()}
+        onLock={vi.fn()}
+        onCollapse={vi.fn()}
+        toggleCorner="nw"
+        onDrag={vi.fn()}
+        prediction={{ historyDays: 7, averageDailyUsagePercent: 10, daysAtAverage: 3.4, daysUntilReset: 2, recommendedDailyPercent: 28 }}
+      />,
+    );
+
+    expect(screen.getByLabelText("额度预测").textContent).toBe("还能使用 3.4 天 · 建议使用 28 % / 天");
   });
 
   it("starts moving from the card header instead of treating the contents wrapper as a resize box", () => {

@@ -11,6 +11,7 @@ type Controls = { radius: number; numberSize: number; progressHeight: number; br
 
 const base: ProviderSnapshot = {
   provider: "codex", displayName: "CODEX", plan: "PRO",
+  quotaHistoryScope: "preview-scope",
   shortWindow: { remainingPercent: 74, resetsAt: new Date(Date.now() + 78 * 60_000).toISOString(), windowSeconds: 18_000 },
   weeklyWindow: { remainingPercent: 42, resetsAt: new Date(Date.now() + 3.2 * 86_400_000).toISOString(), windowSeconds: 604_800 },
   resetCredits: 1, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "ok", message: null,
@@ -22,7 +23,7 @@ const modes: Array<[Mode, string]> = [[74, "healthy"], [35, "caution"], [8, "cri
 const fields = ["--cool", "--glow", "--warm", "--progress-start", "--progress-end"] as const;
 const workbenchCopy = {
   "zh-CN": {
-    widget: "柔光皮肤", computer: "Computer 皮肤", glass: "默认皮肤",
+    widget: "柔光皮肤", computer: "Computer 皮肤", walkman: "Sony Walkman 皮肤", glass: "默认皮肤",
     previewState: "预览状态", previewTheme: "预览主题", language: "内容语言", light: "浅色", dark: "深色",
     geometryPreview: "几何预览", description: "配色为只读，始终来自桌面组件。以下几何调整仅用于此预览，并会在刷新后恢复默认。",
     source: "桌面来源：", cornerRadius: "圆角", mainNumber: "主数字", progressHeight: "进度条高度", brightness: "亮度", motion: "动效", reset: "重置几何设置",
@@ -30,7 +31,7 @@ const workbenchCopy = {
     healthy: "健康", caution: "注意", critical: "紧急", weekly: "每周", unavailable: "不可用", stale: "数据过期", signedOut: "未登录", healthyOrb: "健康圆形", cautionOrb: "注意圆形", criticalOrb: "紧急圆形", weeklyOrb: "每周圆形", unavailableOrb: "不可用圆形", staleOrb: "数据过期圆形", signedOutOrb: "未登录圆形",
   },
   en: {
-    widget: "Soft Light skin", computer: "Computer skin", glass: "Default skin",
+    widget: "Soft Light skin", computer: "Computer skin", walkman: "Sony Walkman skin", glass: "Default skin",
     previewState: "Preview state", previewTheme: "Preview theme", language: "Content language", light: "Light", dark: "Dark",
     geometryPreview: "Geometry preview", description: "The palette is read-only and always comes from the desktop widget. Geometry changes below exist only in this preview and reset on refresh.",
     source: "Desktop source:", cornerRadius: "Corner radius", mainNumber: "Main number", progressHeight: "Progress height", brightness: "Brightness", motion: "Motion", reset: "Reset geometry",
@@ -68,7 +69,7 @@ export function DesignPlayground() {
   const [mode, setMode] = useState<Mode>(() => (query.get("mode") as Mode) || 74);
   const [controls, setControls] = useState<Controls>(defaults);
   const [language, setLanguage] = useState<Language>(() => query.get("language") === "en" ? "en" : "zh-CN");
-  const [previewTab, setPreviewTab] = useState<"widget" | "computer" | "glass">("widget");
+  const [previewTab, setPreviewTab] = useState<"widget" | "computer" | "walkman" | "glass">("widget");
   const snapshot = useMemo(() => makeSnapshot(mode), [mode]);
   const active = paletteName(snapshot);
   const t = workbenchCopy[language];
@@ -85,14 +86,14 @@ export function DesignPlayground() {
 
   return <main className={`design-workbench design-workbench--${theme}`}>
     <section className="design-stage" aria-label={t.widget}>
-      <div className="design-page-tabs" role="tablist" aria-label={t.widget}><button role="tab" aria-selected={previewTab === "widget"} className={previewTab === "widget" ? "is-active" : ""} onClick={() => setPreviewTab("widget")}>{t.widget}</button><button role="tab" aria-selected={previewTab === "computer"} className={previewTab === "computer" ? "is-active" : ""} onClick={() => setPreviewTab("computer")}>{t.computer}</button><button role="tab" aria-selected={previewTab === "glass"} className={previewTab === "glass" ? "is-active" : ""} onClick={() => setPreviewTab("glass")}>{t.glass}</button></div>
+      <div className="design-page-tabs" role="tablist" aria-label={t.widget}><button role="tab" aria-selected={previewTab === "widget"} className={previewTab === "widget" ? "is-active" : ""} onClick={() => setPreviewTab("widget")}>{t.widget}</button><button role="tab" aria-selected={previewTab === "computer"} className={previewTab === "computer" ? "is-active" : ""} onClick={() => setPreviewTab("computer")}>{t.computer}</button><button role="tab" aria-selected={previewTab === "walkman"} className={previewTab === "walkman" ? "is-active" : ""} onClick={() => setPreviewTab("walkman")}>{t.walkman}</button><button role="tab" aria-selected={previewTab === "glass"} className={previewTab === "glass" ? "is-active" : ""} onClick={() => setPreviewTab("glass")}>{t.glass}</button></div>
       <><div className="design-preview-switch" role="group" aria-label={t.previewState}>
         {modes.map(([value, label]) => <button key={label} className={mode === value ? "is-active" : ""} onClick={() => setMode(value)}>{t[label as keyof typeof t]}</button>)}
       </div>
       <div className="design-theme-switch" role="group" aria-label={t.previewTheme}>
         {(["light", "dark"] as const).map((value) => <button key={value} className={theme === value ? "is-active" : ""} onClick={() => setTheme(value)}>{value === "light" ? t.light : t.dark}</button>)}
       </div>
-      <div className={isOrb ? "design-orb-frame" : "design-card-frame"}>{render(snapshot, previewTab === "computer" ? "computer" : previewTab === "glass" ? "glass" : "default")}</div></>
+      <div className={isOrb ? "design-orb-frame" : "design-card-frame"}>{render(snapshot, previewTab === "computer" ? "computer" : previewTab === "walkman" ? "walkman" : previewTab === "glass" ? "glass" : "default")}</div></>
     </section>
     <aside className="design-controls">
       <header><p className="design-kicker">QUOTA FLOAT · PREVIEW</p><h1>{t.geometryPreview}</h1><p className="design-description">{t.description}</p></header>

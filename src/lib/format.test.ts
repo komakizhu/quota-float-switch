@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampPercent, formatResetDate, formatResetTime, needsFastRefresh, quotaTier } from "./format";
+import { clampPercent, formatPlanLabel, formatResetDate, formatResetTime, needsFastRefresh, quotaTier } from "./format";
 
 describe("quota formatting", () => {
   it("clamps untrusted percentages", () => {
@@ -14,6 +14,15 @@ describe("quota formatting", () => {
     expect(quotaTier(10)).toBe("caution");
     expect(quotaTier(9)).toBe("critical");
     expect(quotaTier(null)).toBe("unknown");
+  });
+
+  it("uses the compact multiplier for Pro plan labels", () => {
+    expect(formatPlanLabel("PRO 5X", "Plan")).toBe("PRO 5X");
+    expect(formatPlanLabel("PRO 20X", "Plan")).toBe("PRO 20X");
+    expect(formatPlanLabel("PRO20X", "Plan")).toBe("PRO 20X");
+    expect(formatPlanLabel("PROLITE", "Plan")).toBe("PRO 5X");
+    expect(formatPlanLabel(null, "Plan")).toBe("PLAN");
+    expect(formatPlanLabel("Team", "Plan")).toBe("TEAM");
   });
 
   it("formats reset time in Chinese by default and supports English", () => {
@@ -31,7 +40,7 @@ describe("quota formatting", () => {
 
   it("accelerates only near a future reset", () => {
     const now = new Date("2026-07-07T00:00:00Z");
-    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", weeklyWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
+    const snapshot = { provider: "codex", displayName: "CODEX", plan: "PRO", quotaHistoryScope: "test-scope", weeklyWindow: null, resetCredits: 0, updatedAt: now.toISOString(), status: "ok", message: null } as const;
     expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-07T00:10:00Z", windowSeconds: 18000 } }, now)).toBe(true);
     expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-07T01:00:00Z", windowSeconds: 18000 } }, now)).toBe(false);
     expect(needsFastRefresh({ ...snapshot, shortWindow: { remainingPercent: 1, resetsAt: "2026-07-06T23:58:00Z", windowSeconds: 18000 } }, now)).toBe(true);

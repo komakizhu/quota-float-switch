@@ -1,6 +1,7 @@
 import type { ProviderSnapshot, UsageWindow } from "../types";
 
-export const QUOTA_HISTORY_STORAGE_KEY = "quota-pro:quota-history:v1";
+export const QUOTA_HISTORY_STORAGE_KEY = "quota-pro:quota-history:v2";
+const LEGACY_QUOTA_HISTORY_STORAGE_KEY = "quota-pro:quota-history:v1";
 const MAX_HISTORY_POINTS = 8;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -27,8 +28,12 @@ export interface QuotaPrediction {
   recommendedDailyPercent: number | null;
 }
 
-export function quotaHistoryKey(snapshot: Pick<ProviderSnapshot, "provider">, window: Pick<UsageWindow, "windowSeconds">): string {
-  return `${snapshot.provider}:${window.windowSeconds}`;
+export function quotaHistoryKey(
+  snapshot: Pick<ProviderSnapshot, "provider" | "quotaHistoryScope">,
+  window: Pick<UsageWindow, "windowSeconds">,
+): string | null {
+  if (!snapshot.quotaHistoryScope) return null;
+  return `${snapshot.provider}:${snapshot.quotaHistoryScope}:${window.windowSeconds}`;
 }
 
 function clampPercent(value: number): number {
@@ -86,6 +91,55 @@ export function saveQuotaHistory(history: QuotaHistory, storage: Pick<Storage, "
   }
 }
 
+export function assignLegacyQuotaHistoryToScope(
+  history: QuotaHistory,
+  snapshot: Pick<ProviderSnapshot, "provider" | "quotaHistoryScope">,
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | undefined = browserStorage(),
+): QuotaHistory {
+  if (!storage) return history;
+  if (!snapshot.quotaHistoryScope) return history;
+
+  try {
+    const raw = storage.getItem(LEGACY_QUOTA_HISTORY_STORAGE_KEY);
+    if (!raw) return history;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return history;
+    const legacyPrefix = `${snapshot.provider}:`;
+    let migrated = history;
+    for (const [legacyKey, value] of Object.entries(parsed)) {
+      if (!legacyKey.startsWith(legacyPrefix)) continue;
+      const windowSeconds = legacyKey.slice(legacyPrefix.length);
+      if (!/^\d+$/.test(windowSeconds)) continue;
+      const legacyPoints = normalizePoints(value);
+      if (legacyPoints.length === 0) continue;
+
+      const scopedKey = `${snapshot.provider}:${snapshot.quotaHistoryScope}:${windowSeconds}`;
+      const pointsByDay = new Map(legacyPoints.map((point) => [point.day, point]));
+      for (const point of normalizePoints(migrated[scopedKey])) {
+        pointsByDay.set(point.day, point);
+      }
+      migrated = {
+        ...migrated,
+        [scopedKey]: [...pointsByDay.values()]
+          .sort((left, right) => left.day.localeCompare(right.day))
+          .slice(-MAX_HISTORY_POINTS),
+      };
+    }
+    if (migrated === history) return history;
+
+    storage.setItem(QUOTA_HISTORY_STORAGE_KEY, JSON.stringify(migrated));
+    try {
+      storage.removeItem(LEGACY_QUOTA_HISTORY_STORAGE_KEY);
+    } catch {
+      // The scoped copy is already durable. A later migration attempt is
+      // idempotent because current scoped samples win on duplicate dates.
+    }
+    return migrated;
+  } catch {
+    return history;
+  }
+}
+
 export function recordQuotaSample(history: QuotaHistory, key: string, remainingPercent: number, at = new Date()): QuotaHistory {
   const day = localDay(at);
   const points = [...(history[key] ?? [])];
@@ -137,13 +191,16 @@ export function calculateQuotaPrediction(
   }
 
   const averageDailyUsagePercent = coveredDays > 0 ? usage / coveredDays : null;
-  const daysAtAverage = averageDailyUsagePercent && averageDailyUsagePercent > 0
+  const hasUsableAverage = averageDailyUsagePercent !== null && averageDailyUsagePercent > 0;
+  const daysAtAverage = hasUsableAverage
     ? current / averageDailyUsagePercent
     : null;
   const resetTime = resetAt ? new Date(resetAt).getTime() : Number.NaN;
   const resetDelta = resetTime - now.getTime();
   const daysUntilReset = Number.isFinite(resetDelta) && resetDelta > 0 ? resetDelta / DAY_MS : null;
-  const recommendedDailyPercent = daysUntilReset ? current / daysUntilReset : null;
+  // A reset countdown is a separate piece of information. It is not a
+  // substitute for a consumption-based forecast when history is unavailable.
+  const recommendedDailyPercent = hasUsableAverage && daysUntilReset ? current / daysUntilReset : null;
 
   return {
     historyDays: samples.length,

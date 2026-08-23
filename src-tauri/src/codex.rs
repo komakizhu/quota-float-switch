@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::models::{ProviderSnapshot, UsageWindow};
 
@@ -27,7 +28,25 @@ fn pick_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
     keys.iter().find_map(|key| value.get(*key)?.as_str())
 }
 
-fn account_id_from_jwt(token: &str) -> Option<String> {
+fn plan_label(value: &Value) -> Option<String> {
+    pick_string(
+        value,
+        &["plan_type", "planType", "plan", "plan_name", "planName"],
+    )
+    .map(|plan| plan.trim().to_uppercase())
+    .filter(|plan| !plan.is_empty())
+}
+
+fn plan_from_usage(usage: &Value, rate_limit: &Value) -> Option<String> {
+    plan_label(usage)
+        .or_else(|| plan_label(rate_limit))
+        .or_else(|| usage.get("account").and_then(plan_label))
+        .or_else(|| usage.get("subscription").and_then(plan_label))
+        .or_else(|| rate_limit.get("account").and_then(plan_label))
+        .or_else(|| rate_limit.get("subscription").and_then(plan_label))
+}
+
+fn account_identifier_from_jwt(token: &str) -> Option<String> {
     let payload = token.split('.').nth(1)?;
     let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
     let value: Value = serde_json::from_slice(&bytes).ok()?;
@@ -38,7 +57,21 @@ fn account_id_from_jwt(token: &str) -> Option<String> {
             "chatgpt_account_id",
         ],
     )
+    .filter(|value| !value.trim().is_empty())
+    .or_else(|| pick_string(&value, &["sub"]))
     .map(str::to_owned)
+    .filter(|value| !value.trim().is_empty())
+}
+
+fn quota_history_scope(identifier: Option<&str>) -> Option<String> {
+    let identifier = identifier?.trim();
+    if identifier.is_empty() {
+        return None;
+    }
+    let mut input = b"quota-pro:quota-history-scope:v1\0codex\0".to_vec();
+    input.extend_from_slice(identifier.as_bytes());
+    let digest = Sha256::digest(input);
+    Some(URL_SAFE_NO_PAD.encode(&digest[..16]))
 }
 
 fn load_auth() -> Result<Auth, &'static str> {
@@ -55,7 +88,8 @@ fn load_auth() -> Result<Auth, &'static str> {
         .to_owned();
     let account_id = pick_string(tokens, &["account_id", "accountId"])
         .map(str::to_owned)
-        .or_else(|| account_id_from_jwt(&access_token));
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| account_identifier_from_jwt(&access_token));
     Ok(Auth {
         access_token,
         account_id,
@@ -271,7 +305,10 @@ fn find_window<'a>(
                     })
                 })
                 .unwrap_or(false);
-            if matches_duration || matches_name {
+            // A named array item is only a safe fallback when its duration is
+            // absent. If it reports a known but different duration, do not
+            // let the label make a five-hour bucket look like a weekly one.
+            if matches_duration || (window.window_seconds == 0 && matches_name) {
                 return Some(item);
             }
         }
@@ -288,6 +325,18 @@ fn safe_http_failure(status: reqwest::StatusCode) -> (&'static str, &'static str
             "Quota service is rate limited. It will retry automatically.",
         ),
         _ => ("unavailable", "Quota service is temporarily unavailable."),
+    }
+}
+
+fn snapshot_from_http_failure(
+    status_code: reqwest::StatusCode,
+    quota_history_scope: Option<String>,
+) -> ProviderSnapshot {
+    let (status, message) = safe_http_failure(status_code);
+    if status == "signed_out" {
+        ProviderSnapshot::failure(status, message)
+    } else {
+        ProviderSnapshot::failure_with_scope(status, message, quota_history_scope)
     }
 }
 
@@ -313,6 +362,7 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         Ok(value) => value,
         Err(message) => return ProviderSnapshot::failure("signed_out", message),
     };
+    let quota_history_scope = quota_history_scope(auth.account_id.as_deref());
     let request_headers = match headers(&auth) {
         Ok(value) => value,
         Err(message) => return ProviderSnapshot::failure("signed_out", message),
@@ -329,20 +379,24 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
     let usage_response = match usage_result {
         Ok(response) if response.status().is_success() => response,
         Ok(response) => {
-            let (status, message) = safe_http_failure(response.status());
-            return ProviderSnapshot::failure(status, message);
+            return snapshot_from_http_failure(response.status(), quota_history_scope.clone());
         }
         Err(_) => {
-            return ProviderSnapshot::failure(
+            return ProviderSnapshot::failure_with_scope(
                 "unavailable",
                 "Network unavailable. It will retry automatically.",
+                quota_history_scope.clone(),
             )
         }
     };
     let usage: Value = match limited_json(usage_response).await {
         Ok(value) => value,
         Err(_) => {
-            return ProviderSnapshot::failure("unavailable", "Quota response format has changed.")
+            return ProviderSnapshot::failure_with_scope(
+                "unavailable",
+                "Quota response format has changed.",
+                quota_history_scope.clone(),
+            )
         }
     };
     let rate_limit = usage
@@ -381,9 +435,10 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
         604_800,
     ));
     if short_window.is_none() && weekly_window.is_none() {
-        return ProviderSnapshot::failure(
+        return ProviderSnapshot::failure_with_scope(
             "unavailable",
             "Quota response does not contain a recognized usage window.",
+            quota_history_scope.clone(),
         );
     }
 
@@ -437,7 +492,8 @@ pub async fn fetch_snapshot(client: &reqwest::Client) -> ProviderSnapshot {
     ProviderSnapshot {
         provider: "codex".into(),
         display_name: "CODEX".into(),
-        plan: pick_string(&usage, &["plan_type", "planType"]).map(|value| value.to_uppercase()),
+        plan: plan_from_usage(&usage, rate_limit),
+        quota_history_scope,
         short_window,
         weekly_window,
         reset_credits,
@@ -567,5 +623,133 @@ mod tests {
         .unwrap();
         assert_eq!(weekly.remaining_percent, 98.0);
         assert_eq!(weekly.window_seconds, 604_800);
+    }
+
+    #[test]
+    fn does_not_match_a_named_weekly_item_with_a_short_duration() {
+        let value = serde_json::json!({
+            "windows": [
+                {"name": "weekly", "remainingPercent": 88, "windowSeconds": 18000}
+            ]
+        });
+        assert!(find_window(&value, &["weekly_window", "weekly"], 604800).is_none());
+    }
+
+    #[test]
+    fn reads_plan_labels_from_supported_usage_shapes() {
+        let top_level = serde_json::json!({"plan_type": "pro_5x"});
+        assert_eq!(
+            plan_from_usage(&top_level, &top_level).as_deref(),
+            Some("PRO_5X")
+        );
+
+        let nested = serde_json::json!({
+            "rate_limit": {"planName": "pro 20x"}
+        });
+        let rate_limit = nested.get("rate_limit").unwrap();
+        assert_eq!(
+            plan_from_usage(&nested, rate_limit).as_deref(),
+            Some("PRO 20X")
+        );
+
+        let account = serde_json::json!({"account": {"plan": "pro lite"}});
+        assert_eq!(
+            plan_from_usage(&account, &account).as_deref(),
+            Some("PRO LITE")
+        );
+
+        let nested_account =
+            serde_json::json!({"account": {}, "rate_limit": {"subscription": {"plan": "pro 5x"}}});
+        let rate_limit = nested_account.get("rate_limit").unwrap();
+        assert_eq!(
+            plan_from_usage(&nested_account, rate_limit).as_deref(),
+            Some("PRO 5X")
+        );
+    }
+
+    #[test]
+    fn derives_the_account_identifier_from_jwt_claim_or_sub() {
+        let claim_payload = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&serde_json::json!({
+                "https://api.openai.com/auth.chatgpt_account_id": "account-claim",
+                "sub": "subject-account"
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            account_identifier_from_jwt(&format!("header.{claim_payload}.signature")),
+            Some("account-claim".into())
+        );
+
+        let sub_payload = URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(&serde_json::json!({"sub": "subject-account"})).unwrap());
+        assert_eq!(
+            account_identifier_from_jwt(&format!("header.{sub_payload}.signature")),
+            Some("subject-account".into())
+        );
+
+        let blank_claim_payload = URL_SAFE_NO_PAD.encode(
+            serde_json::to_vec(&serde_json::json!({
+                "https://api.openai.com/auth.chatgpt_account_id": "  ",
+                "sub": "subject-fallback"
+            }))
+            .unwrap(),
+        );
+        assert_eq!(
+            account_identifier_from_jwt(&format!("header.{blank_claim_payload}.signature")),
+            Some("subject-fallback".into())
+        );
+    }
+
+    #[test]
+    fn quota_history_scope_is_stable_and_does_not_expose_the_identifier() {
+        let first = quota_history_scope(Some("account-a")).unwrap();
+        let same = quota_history_scope(Some("account-a")).unwrap();
+        let other = quota_history_scope(Some("account-b")).unwrap();
+
+        assert_eq!(first, same);
+        assert_ne!(first, other);
+        assert_eq!(first.len(), 22);
+        assert!(first.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        }));
+        assert!(!first.contains("account-a"));
+        assert!(quota_history_scope(None).is_none());
+        assert!(quota_history_scope(Some("  ")).is_none());
+    }
+
+    #[test]
+    fn snapshot_serialization_exposes_only_the_hashed_scope() {
+        let snapshot = ProviderSnapshot::failure_with_scope(
+            "unavailable",
+            "Network unavailable.",
+            Some("scope-value".into()),
+        );
+        let json = serde_json::to_string(&snapshot).unwrap();
+
+        assert!(json.contains("\"quotaHistoryScope\":\"scope-value\""));
+        assert!(!json.contains("account_id"));
+        assert!(!json.contains("access_token"));
+        assert!(!json.contains("Bearer"));
+    }
+
+    #[test]
+    fn signed_out_http_failures_do_not_retain_a_scope() {
+        let signed_out = snapshot_from_http_failure(
+            reqwest::StatusCode::UNAUTHORIZED,
+            Some("scope-value".into()),
+        );
+        assert_eq!(signed_out.status, "signed_out");
+        assert!(signed_out.quota_history_scope.is_none());
+
+        let unavailable = snapshot_from_http_failure(
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            Some("scope-value".into()),
+        );
+        assert_eq!(unavailable.status, "unavailable");
+        assert_eq!(
+            unavailable.quota_history_scope.as_deref(),
+            Some("scope-value")
+        );
     }
 }

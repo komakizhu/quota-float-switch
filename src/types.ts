@@ -3,7 +3,7 @@ export type SnapshotStatus = "ok" | "stale" | "loading" | "unavailable" | "signe
 export type Language = "zh-CN" | "en";
 export type WidgetTheme = "light" | "dark";
 export type AppearancePreference = "system" | WidgetTheme;
-export type BuiltinSkin = "default" | "computer" | "glass";
+export type BuiltinSkin = "default" | "computer" | "glass" | "walkman";
 export type WidgetSkin = BuiltinSkin;
 export type GlassStyle = "transparent" | "dock" | "liquid";
 export type SkinTextTone = "auto" | "light" | "dark";
@@ -40,6 +40,7 @@ export interface ProviderSnapshot {
   provider: ProviderId;
   displayName: string;
   plan: string | null;
+  quotaHistoryScope: string | null;
   shortWindow: UsageWindow | null;
   weeklyWindow: UsageWindow | null;
   resetCredits: number | null;

@@ -77,6 +77,7 @@ const localized = {
     custom: "Custom skins",
     default: "Soft Light",
     computer: "Computer",
+    walkman: "Sony Walkman",
     glass: "Default",
     glassStyle: "Glass material",
     glassTransparent: "Transparent",
@@ -132,6 +133,7 @@ const localized = {
     custom: "自定义皮肤",
     default: "柔光",
     computer: "电脑",
+    walkman: "Sony Walkman",
     glass: "默认",
     glassStyle: "玻璃材质",
     glassTransparent: "透明",
@@ -575,7 +577,7 @@ export function SettingsPanel() {
         <section className="appearance-settings-group">
           <h3>{t.sections.skins}</h3>
           <h4>{t.builtin}</h4>
-          <div className="skin-grid">{(["glass", "default", "computer"] as const).map((id) => <label className="skin-choice" key={id}><input disabled={!ready} type="radio" name="skin" checked={preferences.selectedSkin === id} onChange={() => void applyNativePreferences(() => selectSkin(id))} aria-label={t[id]} /><span className={`skin-preview skin-preview--${id}`}>{preferences.selectedSkin === id ? <Check weight="bold" /> : null}</span><span>{t[id]}</span></label>)}</div>
+          <div className="skin-grid">{(["glass", "default", "computer", "walkman"] as const).map((id) => <label className="skin-choice" key={id}><input disabled={!ready} type="radio" name="skin" checked={preferences.selectedSkin === id} onChange={() => void applyNativePreferences(() => selectSkin(id))} aria-label={t[id]} /><span className={`skin-preview skin-preview--${id}`}>{preferences.selectedSkin === id ? <Check weight="bold" /> : null}</span><span>{t[id]}</span></label>)}</div>
         {preferences.selectedSkin === "glass" ? <fieldset className="glass-style-options" disabled={!ready}><legend>{t.glassStyle}</legend>{(["transparent", "dock", "liquid"] as GlassStyle[]).map((style) => {
           const disabled = style === "liquid" && !platformCapabilities.supportsLiquidGlass;
           const label = style === "transparent" ? t.glassTransparent : style === "dock" ? t.glassDock : t.glassLiquid;

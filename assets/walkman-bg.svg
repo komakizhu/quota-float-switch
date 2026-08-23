@@ -1,0 +1,30 @@
+<svg viewBox="0 0 190 306" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Walkman shell">
+  <defs>
+    <linearGradient id="body" x1="9" y1="0" x2="176" y2="306" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173e70"/>
+      <stop offset=".48" stop-color="#0d2c57"/>
+      <stop offset="1" stop-color="#071b3a"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="162" y1="0" x2="190" y2="306" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd1d5"/>
+      <stop offset=".48" stop-color="#eeb7c9"/>
+      <stop offset="1" stop-color="#c896b2"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="10" y2="306" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67e1ec"/>
+      <stop offset=".5" stop-color="#31b7d2"/>
+      <stop offset="1" stop-color="#1376b1"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="2" width="184" height="302" rx="22" fill="url(#body)" stroke="#050f25" stroke-width="3"/>
+  <rect x="8" y="8" width="158" height="290" rx="17" fill="#123564" fill-opacity=".68" stroke="#285487" stroke-width="1.5"/>
+  <rect x="166" y="8" width="18" height="290" rx="9" fill="url(#rail)"/>
+  <rect x="3" y="30" width="5" height="226" rx="2.5" fill="url(#edge)"/>
+  <rect x="18" y="14" width="84" height="5" rx="2.5" fill="#6e9bd2" fill-opacity=".26"/>
+  <rect x="106" y="13" width="27" height="6" rx="3" fill="#f27b64"/>
+  <circle cx="145" cy="16" r="4" fill="#d6f5f0" fill-opacity=".82"/>
+  <rect x="172" y="54" width="10" height="27" rx="4" fill="#324a6e" stroke="#ffe0de" stroke-opacity=".52"/>
+  <rect x="172" y="91" width="10" height="27" rx="4" fill="#324a6e" stroke="#ffe0de" stroke-opacity=".4"/>
+  <rect x="172" y="128" width="10" height="27" rx="4" fill="#324a6e" stroke="#ffe0de" stroke-opacity=".28"/>
+  <path d="M18 285H158" stroke="#6f9dd1" stroke-opacity=".34"/>
+</svg>

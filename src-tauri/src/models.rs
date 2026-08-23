@@ -17,6 +17,7 @@ pub struct ProviderSnapshot {
     pub provider: String,
     pub display_name: String,
     pub plan: Option<String>,
+    pub quota_history_scope: Option<String>,
     pub short_window: Option<UsageWindow>,
     pub weekly_window: Option<UsageWindow>,
     pub reset_credits: Option<u64>,
@@ -28,10 +29,19 @@ pub struct ProviderSnapshot {
 
 impl ProviderSnapshot {
     pub fn failure(status: &str, message: &str) -> Self {
+        Self::failure_with_scope(status, message, None)
+    }
+
+    pub fn failure_with_scope(
+        status: &str,
+        message: &str,
+        quota_history_scope: Option<String>,
+    ) -> Self {
         Self {
             provider: "codex".into(),
             display_name: "CODEX".into(),
             plan: None,
+            quota_history_scope,
             short_window: None,
             weekly_window: None,
             reset_credits: None,
@@ -256,7 +266,7 @@ impl WidgetPreferences {
         let selected_custom_id = self.selected_skin.strip_prefix("custom:");
         let selected_skin_is_valid = matches!(
             self.selected_skin.as_str(),
-            "default" | "computer" | "glass"
+            "default" | "computer" | "glass" | "walkman"
         ) || selected_custom_id.is_some_and(|selected_id| {
             !selected_id.is_empty()
                 && self
@@ -287,7 +297,7 @@ mod tests {
 
     #[test]
     fn legacy_builtin_skin_selections_remain_selected_without_unlocks() {
-        for selected_skin in ["computer", "glass"] {
+        for selected_skin in ["computer", "glass", "walkman"] {
             let parsed: WidgetPreferences =
                 serde_json::from_value(legacy_preferences(selected_skin))
                     .expect("legacy preferences should deserialize");

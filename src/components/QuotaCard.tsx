@@ -1,6 +1,6 @@
 import { ArrowClockwise, ArrowDown, ArrowUp, ArrowsInSimple, ClockCounterClockwise, CloudSlash, GearSix, Info, PushPin, PushPinSlash, SignIn, WarningCircle } from "@phosphor-icons/react";
-import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { clampPercent, formatDateTime, formatResetDate, formatResetTime, quotaTier } from "../lib/format";
+import { Fragment, memo, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { clampPercent, formatDateTime, formatPlanLabel, formatResetDate, formatResetTime, quotaTier } from "../lib/format";
 import { copy, normalizeLanguage } from "../lib/i18n";
 import { consumeOrbClick, createOrbDragState, recordOrbDrag } from "../lib/orbGesture";
 import { orbCornerRadiusForSize, resizeContentScaleForSize, useDevicePixelRatio, widgetScaleForSize } from "../lib/render";
@@ -17,6 +17,7 @@ import computerErrorStaleUrl from "../../assets/computer-error-stale.svg";
 import computerErrorSignedOutUrl from "../../assets/computer-error-signedout.svg";
 import computerOrbErrorScreenUrl from "../../assets/computer-orb-screen-error.svg";
 import computerOrbGptUrl from "../../assets/computer-orb-gpt.svg";
+import walkmanOrbBaseUrl from "../../assets/walkman-orb-base.svg";
 
 interface Props {
   snapshot: ProviderSnapshot;
@@ -94,13 +95,24 @@ function localizedBackendMessage(message: string | null, language: Language): st
   return message;
 }
 
-function renderForecastLine(line: { text: string; value: string }): ReactNode {
+function renderForecastInline(line: { text: string; value: string }): ReactNode {
   const valueStart = line.text.indexOf(line.value);
-  if (valueStart < 0) return <p>{line.text}</p>;
-  return <p>
+  if (valueStart < 0) return line.text;
+  return <>
     {line.text.slice(0, valueStart)}
     <strong className="quota-forecast-value">{line.value}</strong>
     {line.text.slice(valueStart + line.value.length)}
+  </>;
+}
+
+function renderForecastSummary(lines: Array<{ text: string; value: string }>): ReactNode {
+  return <p>
+    {lines.map((line, index) => (
+      <Fragment key={`${line.text}-${index}`}>
+        {index ? " · " : null}
+        {renderForecastInline(line)}
+      </Fragment>
+    ))}
   </p>;
 }
 
@@ -113,6 +125,45 @@ function ComputerProgress({ percent, label }: { percent: number; label: string }
       return <i key={index} className={index < available ? "is-available" : "is-used"} style={index < available ? { "--computer-progress-end-weight": `${endWeight}%` } as CSSProperties : undefined} aria-hidden="true" />;
     })}
   </div>;
+}
+
+function walkmanResetDetails(resetsAt: string | null, language: Language): { label: string; date: string } {
+  if (!resetsAt) return {
+    label: language === "en" ? "Reset —" : "重置 —",
+    date: "—",
+  };
+  const target = new Date(resetsAt);
+  if (Number.isNaN(target.getTime())) return {
+    label: language === "en" ? "Reset —" : "重置 —",
+    date: "—",
+  };
+  const remainingDays = Math.max(0, Math.ceil((target.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+  return {
+    label: language === "en" ? `Reset ${remainingDays}d` : `重置 ${remainingDays}天`,
+    date: new Intl.DateTimeFormat(language === "en" ? "en-US" : "zh-CN", { month: "short", day: "numeric" }).format(target),
+  };
+}
+
+function WalkmanTapeWindow({
+  percent,
+  resetsAt,
+  language,
+  compact = false,
+}: {
+  percent: number;
+  resetsAt: string | null;
+  language: Language;
+  compact?: boolean;
+}) {
+  const reset = walkmanResetDetails(resetsAt, language);
+  return <section className={`walkman-tape-window${compact ? " walkman-tape-window--compact" : ""}`} aria-label={language === "en" ? "Walkman quota" : "Walkman 额度"}>
+    <span className="walkman-reel walkman-reel--top" aria-hidden="true"><i /></span>
+    <span className="walkman-reel walkman-reel--bottom" aria-hidden="true"><i /></span>
+    <div className="walkman-tape-level" aria-hidden="true" style={{ "--walkman-level": `${percent}%` } as CSSProperties}><i /></div>
+    <div className="walkman-tape-metric"><span>{percent}</span><small>%</small></div>
+    <p className="walkman-tape-reset">{reset.label}</p>
+    <p className="walkman-tape-date">{reset.date}</p>
+  </section>;
 }
 
 export const QuotaCard = memo(function QuotaCard({
@@ -144,6 +195,11 @@ export const QuotaCard = memo(function QuotaCard({
   customSkin = false,
   style,
 }: Props) {
+  const computerLikeSkin = skin === "computer" || skin === "walkman";
+  const computerPlanLabel = snapshot.plan ? formatPlanLabel(snapshot.plan, "PLUS") : null;
+  const eyebrowLabel = computerLikeSkin
+    ? computerPlanLabel ? `CODEX · ${computerPlanLabel}` : "CODEX · PLUS"
+    : `${snapshot.displayName.trim().toUpperCase()} · ${formatPlanLabel(snapshot.plan, copy[normalizeLanguage(preferences.language)].accountFallback)}`;
   const [showCreditTip, setShowCreditTip] = useState(initialShowCreditTip);
   const [hoveredResizeEdge, setHoveredResizeEdge] = useState<ResizeEdge | null>(null);
   const [activeResizeEdge, setActiveResizeEdge] = useState<ResizeEdge | null>(null);
@@ -187,6 +243,28 @@ export const QuotaCard = memo(function QuotaCard({
   }, []);
   const language = normalizeLanguage(preferences.language);
   const t = copy[language];
+  const eyebrowRef = useRef<HTMLParagraphElement | null>(null);
+  useLayoutEffect(() => {
+    const eyebrow = eyebrowRef.current;
+    const parent = eyebrow?.parentElement;
+    if (!eyebrow || !parent) return;
+
+    const measure = () => {
+      eyebrow.style.setProperty("--eyebrow-scale", "1");
+      const availableWidth = parent.clientWidth || parent.getBoundingClientRect().width;
+      const intrinsicWidth = eyebrow.scrollWidth;
+      const scale = availableWidth > 0 && intrinsicWidth > availableWidth
+        ? Math.max(0.6, availableWidth / intrinsicWidth)
+        : 1;
+      eyebrow.style.setProperty("--eyebrow-scale", String(scale));
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [devicePixelRatio, eyebrowLabel, preferences.locked, previewSize, providerCount, toggleCorner]);
   const primary = snapshot.shortWindow ? clampPercent(snapshot.shortWindow.remainingPercent) : null;
   const weekly = snapshot.weeklyWindow ? clampPercent(snapshot.weeklyWindow.remainingPercent) : null;
   const displayPercent = primary ?? weekly;
@@ -203,14 +281,34 @@ export const QuotaCard = memo(function QuotaCard({
   const forecastText = useMemo(() => {
     if (!prediction) return null;
     const number = (value: number | null) => value === null ? null : new Intl.NumberFormat(language === "en" ? "en-US" : "zh-CN", { maximumFractionDigits: 1 }).format(Math.max(0, value));
-    const daily = number(prediction.recommendedDailyPercent === null ? null : Math.min(100, prediction.recommendedDailyPercent));
-    const days = number(prediction.daysAtAverage ?? prediction.daysUntilReset);
-    if (!days && !daily) return null;
+    const daily = number(prediction.recommendedDailyPercent === null ? null : Math.min(100, prediction.recommendedDailyPercent)) ?? "—";
+    const days = number(prediction.daysAtAverage) ?? "—";
     return {
-      days: days ? { text: t.forecastRemainingDays(days), value: days } : null,
-      daily: daily ? { text: t.forecastDailyBudget(daily), value: daily } : null,
+      days: { text: t.forecastRemainingDays(days), value: days },
+      daily: { text: t.forecastDailyBudget(daily), value: daily },
     };
   }, [language, prediction, t]);
+  const forecastRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const forecast = forecastRef.current;
+    if (!forecast) return;
+
+    const measure = () => {
+      forecast.style.setProperty("--forecast-scale", "1");
+      const availableWidth = forecast.clientWidth || forecast.getBoundingClientRect().width;
+      const intrinsicWidth = forecast.scrollWidth;
+      const scale = availableWidth > 0 && intrinsicWidth > availableWidth
+        ? Math.max(0.55, availableWidth / intrinsicWidth)
+        : 1;
+      forecast.style.setProperty("--forecast-scale", String(scale));
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(forecast);
+    return () => observer.disconnect();
+  }, [devicePixelRatio, forecastText, preferences.locked, previewSize, toggleCorner]);
 
   const resizeClass = activeResizeEdge ?? hoveredResizeEdge;
   const isExcludedResizeTarget = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, nav"));
@@ -348,11 +446,26 @@ export const QuotaCard = memo(function QuotaCard({
       ) : null}
     </div>
   );
+  const errorState = (
+    <section className="error-state" aria-live="polite">
+      {skin === "computer"
+        ? <div className="status-icon status-icon--computer" aria-hidden="true"><ComputerErrorArtwork status={snapshot.status} /></div>
+        : <div className="status-icon" aria-hidden="true"><StatusIcon status={snapshot.status} expired={staleExpired} /></div>}
+      <strong>{snapshot.status === "signed_out" ? t.signedInRequired : staleExpired ? t.staleExpired : t.temporarilyUnavailable}</strong>
+      <p>{message ?? t.errorUnavailable}</p>
+      {snapshot.status === "stale" ? (
+        <button type="button" className="error-refresh-button" onMouseDown={(event) => event.stopPropagation()} onClick={onRefresh} disabled={!onRefresh} aria-label={t.refreshQuota}>
+          <ArrowClockwise />
+          <span>{t.refresh}</span>
+        </button>
+      ) : null}
+    </section>
+  );
 
   return (
     <main
       ref={rootRef}
-      className={`quota-card quota-card--${snapshot.status} quota-card--${tier}${theme ? ` quota-card--theme-${theme}` : ""}${skin === "computer" ? " quota-card--skin-computer" : ""}${skin === "glass" ? ` quota-card--skin-glass quota-card--glass-${glassStyle}${nativeGlass ? " quota-card--native-glass" : ""}` : ""}${customSkin ? " quota-card--skin-custom" : ""}${resizeClass ? ` quota-resize--${resizeClass}` : ""}${isResizePreviewActive ? " is-resizing" : ""}${toggleLayoutClass}${weeklyPrimaryLayoutClass}`}
+      className={`quota-card quota-card--${snapshot.status} quota-card--${tier}${theme ? ` quota-card--theme-${theme}` : ""}${skin === "computer" ? " quota-card--skin-computer" : ""}${skin === "walkman" ? " quota-card--skin-walkman" : ""}${skin === "glass" ? ` quota-card--skin-glass quota-card--glass-${glassStyle}${nativeGlass ? " quota-card--native-glass" : ""}` : ""}${customSkin ? " quota-card--skin-custom" : ""}${resizeClass ? ` quota-resize--${resizeClass}` : ""}${isResizePreviewActive ? " is-resizing" : ""}${toggleLayoutClass}${weeklyPrimaryLayoutClass}`}
       style={style}
       onMouseMove={(event) => { if (!activeResizeEdge) setHoveredResizeEdge(getResizeEdge(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())); }}
       onMouseLeave={() => { if (!activeResizeEdge) setHoveredResizeEdge(null); }}
@@ -369,7 +482,7 @@ export const QuotaCard = memo(function QuotaCard({
           if (event.button === 0 && !getResizeEdge(event.clientX, event.clientY, cardRect) && !isExcludedResizeTarget(event.target)) void onDrag();
         }}>
           <div className={`card-identity${displayingWeeklyAsPrimary ? " card-identity--weekly" : ""}`}>
-            <p className="eyebrow">{skin === "computer" ? "codex·plus" : `${snapshot.displayName} · ${snapshot.plan ?? t.accountFallback}`}</p>
+            <p ref={eyebrowRef} className="eyebrow">{eyebrowLabel}</p>
             {snapshot.status !== "stale" ? <p className="updated">{displayingWeeklyAsPrimary ? t.weeklyShortRemaining : t.shortRemaining}</p> : null}
           </div>
           {!preferences.locked ? (
@@ -391,18 +504,22 @@ export const QuotaCard = memo(function QuotaCard({
           ) : null}
         </header>
 
-        {available && displayPercent !== null ? (
+        {skin === "walkman" && available && displayPercent !== null ? (
+          <WalkmanTapeWindow percent={displayPercent} resetsAt={displayWindow?.resetsAt ?? null} language={language} />
+        ) : null}
+        {skin === "walkman" && available && displayPercent !== null ? <span className="walkman-wordmark" aria-hidden="true">WALKMAN</span> : null}
+
+        {skin === "walkman" ? (available && displayPercent !== null ? null : errorState) : available && displayPercent !== null ? (
           <>
             <section className="primary-metric" aria-label={displayingWeeklyAsPrimary ? t.weeklyAvailableLabel(displayPercent) : t.availableLabel(displayPercent)}>
               <span>{displayPercent}</span><small>%</small>
             </section>
-            {skin === "computer"
+            {computerLikeSkin
                 ? <ComputerProgress percent={displayPercent} label={displayingWeeklyAsPrimary ? t.weeklyAvailableLabel(displayPercent) : t.availableLabel(displayPercent)} />
                 : <div className="progress" role="progressbar" aria-label={displayingWeeklyAsPrimary ? t.weeklyAvailableLabel(displayPercent) : t.availableLabel(displayPercent)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={displayPercent}><span style={{ width: `${displayPercent}%` }} /></div>}
             <p className="reset-time">{formatResetTime(displayWindow?.resetsAt ?? null, new Date(), language)}{displayWindow?.resetsAt ? ` · ${formatDateTime(displayWindow.resetsAt, language)}` : ""}</p>
-            {forecastText ? <div className="quota-forecast" aria-label={language === "en" ? "Quota forecast" : "额度预测"}>
-              {forecastText.days ? renderForecastLine(forecastText.days) : null}
-              {forecastText.daily ? renderForecastLine(forecastText.daily) : null}
+            {forecastText ? <div ref={forecastRef} className="quota-forecast" aria-label={language === "en" ? "Quota forecast" : "额度预测"}>
+              {renderForecastSummary([forecastText.days, forecastText.daily])}
             </div> : null}
             <footer className="card-footer">
               <div className="weekly-metric">
@@ -414,27 +531,17 @@ export const QuotaCard = memo(function QuotaCard({
               </div>
             </footer>
           </>
-        ) : (
-          <section className="error-state" aria-live="polite">
-            {skin === "computer"
-              ? <div className="status-icon status-icon--computer" aria-hidden="true"><ComputerErrorArtwork status={snapshot.status} /></div>
-              : <div className="status-icon" aria-hidden="true"><StatusIcon status={snapshot.status} expired={staleExpired} /></div>}
-            <strong>{snapshot.status === "signed_out" ? t.signedInRequired : staleExpired ? t.staleExpired : t.temporarilyUnavailable}</strong>
-            <p>{message ?? t.errorUnavailable}</p>
-            {snapshot.status === "stale" ? (
-              <button type="button" className="error-refresh-button" onMouseDown={(event) => event.stopPropagation()} onClick={onRefresh} disabled={!onRefresh} aria-label={t.refreshQuota}>
-                <ArrowClockwise />
-                <span>{t.refresh}</span>
-              </button>
-            ) : null}
-          </section>
-        )}
+        ) : errorState}
       </div>
     </main>
   );
 });
 
 export const QuotaOrb = memo(function QuotaOrb({ snapshot, onDrag, onExpand, onResizeStart, onResizePreview, onResizeCommit, onResizeCancel, onResizeReset, resizeSize = 72, language = "zh-CN", theme, skin = "default", glassStyle = "dock", nativeGlass = false, customSkin = false, style }: Pick<Props, "snapshot" | "onDrag" | "theme" | "skin" | "glassStyle" | "nativeGlass" | "customSkin" | "style" | "onResizeStart" | "onResizePreview" | "onResizeCommit" | "onResizeCancel" | "onResizeReset" | "resizeSize"> & { language?: Language; onExpand: () => void }) {
+  const computerSkin = skin === "computer";
+  const walkmanBrandLabel = snapshot.plan
+    ? `CODEX · ${formatPlanLabel(snapshot.plan, "PLUS")}`
+    : "CODEX · PLUS";
   const [idle, setIdle] = useState(false);
   const [hoveredResizeEdge, setHoveredResizeEdge] = useState<ResizeEdge | null>(null);
   const [activeResizeEdge, setActiveResizeEdge] = useState<ResizeEdge | null>(null);
@@ -470,6 +577,7 @@ export const QuotaOrb = memo(function QuotaOrb({ snapshot, onDrag, onExpand, onR
   const displayPercent = primary ?? weekly;
   const displayingWeeklyAsPrimary = primary === null && weekly !== null;
   const tier = quotaTier(displayPercent);
+  const computerFullMetric = skin === "computer" && displayPercent === 100;
   const available = snapshot.status === "ok" && displayPercent !== null;
   const computerScreen = tier === "caution"
     ? computerOrbCautionUrl
@@ -693,13 +801,15 @@ export const QuotaOrb = memo(function QuotaOrb({ snapshot, onDrag, onExpand, onR
       role="button"
       tabIndex={0}
       aria-label={available ? (displayingWeeklyAsPrimary ? t.weeklyAvailableLabel(displayPercent!) : t.availableLabel(displayPercent!)) : localizedBackendMessage(snapshot.message, activeLanguage) ?? t.unavailableStatus}
-      className={`quota-orb quota-card--${snapshot.status} quota-card--${tier}${theme ? ` quota-orb--theme-${theme}` : ""}${skin === "computer" ? " quota-orb--skin-computer" : ""}${skin === "glass" ? ` quota-orb--skin-glass quota-orb--glass-${glassStyle}${nativeGlass ? " quota-orb--native-glass" : ""}` : ""}${customSkin ? " quota-orb--skin-custom" : ""}${displayingWeeklyAsPrimary ? " quota-orb--weekly" : ""}${idle ? " quota-orb--idle" : ""}${(activeResizeEdge ?? hoveredResizeEdge) ? ` quota-resize--${activeResizeEdge ?? hoveredResizeEdge}` : ""}${activeResizeEdge ? " is-resizing" : ""}`}
+      className={`quota-orb quota-card--${snapshot.status} quota-card--${tier}${theme ? ` quota-orb--theme-${theme}` : ""}${skin === "computer" ? " quota-orb--skin-computer" : ""}${computerFullMetric ? " quota-orb--computer-full" : ""}${skin === "walkman" ? " quota-orb--skin-walkman" : ""}${skin === "glass" ? ` quota-orb--skin-glass quota-orb--glass-${glassStyle}${nativeGlass ? " quota-orb--native-glass" : ""}` : ""}${customSkin ? " quota-orb--skin-custom" : ""}${displayingWeeklyAsPrimary ? " quota-orb--weekly" : ""}${idle ? " quota-orb--idle" : ""}${(activeResizeEdge ?? hoveredResizeEdge) ? ` quota-resize--${activeResizeEdge ?? hoveredResizeEdge}` : ""}${activeResizeEdge ? " is-resizing" : ""}`}
     >
       <div className="aurora" aria-hidden="true" />
       <div className="orb-content">
-        {skin === "computer" ? <img className="computer-orb-base" src={computerOrbBaseUrl} alt="" aria-hidden="true" /> : null}
-        {skin === "computer" ? <img className="computer-orb-screen" src={available ? computerScreen : computerOrbErrorScreenUrl} alt="" aria-hidden="true" /> : null}
-        {available && displayingWeeklyAsPrimary && skin !== "computer" ? (
+        {skin === "walkman" ? <span className="walkman-orb-brand" aria-hidden="true">{walkmanBrandLabel}</span> : null}
+        {computerSkin ? <img className="computer-orb-base" src={computerOrbBaseUrl} alt="" aria-hidden="true" /> : null}
+        {computerSkin ? <img className="computer-orb-screen" src={available ? computerScreen : computerOrbErrorScreenUrl} alt="" aria-hidden="true" /> : null}
+        {skin === "walkman" ? <img className="walkman-orb-base" src={walkmanOrbBaseUrl} alt="" aria-hidden="true" /> : null}
+        {available && displayingWeeklyAsPrimary && !computerSkin ? (
           <span className="orb-weekly-badge" aria-hidden="true">
             <svg viewBox="0 0 55 17" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M7.3687 52.2894C13.0674 47.8486 17 38.4172 17 27.5C17 16.5828 13.0674 7.15141 7.3687 2.71063C3.88364 -0.00516105 0 3.58172 0 8L0 47C0 51.4183 3.88364 55.0052 7.3687 52.2894Z" fill="currentColor" transform="matrix(0 1 -1 0 55 0)" />
@@ -707,14 +817,16 @@ export const QuotaOrb = memo(function QuotaOrb({ snapshot, onDrag, onExpand, onR
             <b>W</b>
           </span>
         ) : null}
-        {available ? (
+        {skin === "walkman" && available && displayPercent !== null ? (
+          <WalkmanTapeWindow percent={displayPercent} resetsAt={snapshot.shortWindow?.resetsAt ?? snapshot.weeklyWindow?.resetsAt ?? null} language={activeLanguage} compact />
+        ) : available ? (
           <section className="orb-metric">
             <span>{displayPercent}</span>
-            {skin !== "computer" ? <small>%</small> : null}
+            {!computerSkin ? <small>%</small> : null}
           </section>
         ) : (
           <section className="orb-unavailable">
-            {skin === "computer"
+            {computerSkin
               ? <img className={`computer-orb-error-symbol computer-orb-error-symbol--${snapshot.status}`} src={computerOrbErrorSymbol} alt="" aria-hidden="true" />
               : <StatusIcon status={snapshot.status} />}
           </section>

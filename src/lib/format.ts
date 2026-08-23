@@ -12,6 +12,25 @@ export function quotaTier(percent: number | null): "unknown" | "healthy" | "caut
   return "critical";
 }
 
+/**
+ * Keep the plan label compact enough for the card header while preserving the
+ * provider's original value for plans we do not know about.
+ *
+ * The API has used both `PRO 5X` and the legacy `PRO LITE` label for this
+ * quota tier. Keep the product family in the label, but normalize the
+ * multiplier casing and replace the legacy name with `PRO 5X`.
+ */
+export function formatPlanLabel(plan: string | null, fallback: string): string {
+  const normalized = plan?.trim();
+  if (!normalized) return fallback.trim().toUpperCase();
+
+  const compactPlan = normalized.replace(/[\s_-]+/g, " ").trim();
+  const proMultiplier = compactPlan.match(/^pro\s*(\d+(?:\.\d+)?x)\b/i);
+  if (proMultiplier) return `PRO ${proMultiplier[1].toUpperCase()}`;
+  if (/^pro\s*lite$/i.test(compactPlan)) return "PRO 5X";
+  return normalized.toUpperCase();
+}
+
 export function formatResetTime(value: string | null, now = new Date(), language: Language = "zh-CN"): string {
   const t = copy[normalizeLanguage(language)];
   if (!value) return t.resetTimeUnknown;

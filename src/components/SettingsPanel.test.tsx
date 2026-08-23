@@ -64,7 +64,7 @@ beforeEach(() => {
   bridge.getPreferences.mockImplementation(async () => structuredClone(bridge.preferences));
   bridge.updatePreferences.mockImplementation(async (value: WidgetPreferences) => { bridge.preferences = structuredClone(value); });
   bridge.getLaunchAtLogin.mockResolvedValue(false);
-  bridge.getAppVersion.mockResolvedValue("1.0.0");
+  bridge.getAppVersion.mockResolvedValue("1.1.0");
   bridge.getPlatformCapabilities.mockResolvedValue({ nativeGlass: true, supportsLiquidGlass: false });
   bridge.setLaunchAtLogin.mockImplementation(async (enabled: boolean) => enabled);
   bridge.setAlwaysOnTop.mockImplementation(async (value: boolean) => ({ ...bridge.preferences, alwaysOnTop: value }));
@@ -122,9 +122,9 @@ describe("SettingsPanel live controls", () => {
     for (const appearance of ["System", "Light", "Dark"]) expect(screen.getByRole("radio", { name: appearance })).toBeInTheDocument();
     expect(Array.from(screen.getByTestId("settings-panel").querySelectorAll(".appearance-settings > section > h3")).map((heading) => heading.textContent)).toEqual(["Theme", "Skins"]);
 
-    for (const skin of ["Default", "Soft Light", "Computer"]) expect(screen.getByRole("radio", { name: skin })).toBeInTheDocument();
+    for (const skin of ["Default", "Soft Light", "Computer", "Sony Walkman"]) expect(screen.getByRole("radio", { name: skin })).toBeInTheDocument();
     const skinGrid = screen.getByText("Default").closest(".skin-grid");
-    expect(Array.from(skinGrid?.querySelectorAll(".skin-choice") ?? []).map((choice) => choice.textContent?.trim())).toEqual(["Default", "Soft Light", "Computer"]);
+    expect(Array.from(skinGrid?.querySelectorAll(".skin-choice") ?? []).map((choice) => choice.textContent?.trim())).toEqual(["Default", "Soft Light", "Computer", "Sony Walkman"]);
     for (const style of ["Transparent", "Dock frosted glass", "Liquid Glass"]) {
       expect(screen.getByRole("radio", { name: style })).toBeInTheDocument();
     }
@@ -172,6 +172,8 @@ describe("SettingsPanel live controls", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "Computer" }));
     await waitFor(() => expect(bridge.selectSkin).toHaveBeenCalledWith("computer"));
+    fireEvent.click(screen.getByRole("radio", { name: "Sony Walkman" }));
+    await waitFor(() => expect(bridge.selectSkin).toHaveBeenCalledWith("walkman"));
     fireEvent.click(screen.getByRole("radio", { name: "Default" }));
     await waitFor(() => expect(bridge.selectSkin).toHaveBeenCalledWith("glass"));
   });
@@ -179,7 +181,7 @@ describe("SettingsPanel live controls", () => {
   it("shows the version and controls automatic update checks", async () => {
     await renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "Version & Updates" }));
-    expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+    expect(screen.getByText("v1.1.0")).toBeInTheDocument();
     const automatic = screen.getByRole("checkbox", { name: "Automatically check for updates" });
     expect(automatic).toBeChecked();
     fireEvent.click(automatic);

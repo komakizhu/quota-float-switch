@@ -1,0 +1,19 @@
+<svg viewBox="0 0 58 72" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Walkman shell">
+  <defs>
+    <linearGradient id="body" x1="3" y1="0" x2="55" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173f71"/>
+      <stop offset=".52" stop-color="#0b2b56"/>
+      <stop offset="1" stop-color="#061a37"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="47" y1="0" x2="58" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffd2d6"/>
+      <stop offset="1" stop-color="#c891b0"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.5" y="1" width="55" height="70" rx="11" fill="url(#body)" stroke="#050f25" stroke-width="2"/>
+  <rect x="48" y="2" width="8" height="68" rx="4" fill="url(#rail)"/>
+  <rect x="1.5" y="16" width="2.5" height="43" rx="1.25" fill="#56d5e4"/>
+  <rect x="33" y="4" width="10" height="2.5" rx="1.25" fill="#ef7965"/>
+  <rect x="50" y="20" width="5" height="12" rx="2" fill="#334a6b" stroke="#ffe3e0" stroke-opacity=".5"/>
+  <rect x="50" y="37" width="5" height="12" rx="2" fill="#334a6b" stroke="#ffe3e0" stroke-opacity=".32"/>
+</svg>

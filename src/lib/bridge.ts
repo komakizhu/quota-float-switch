@@ -18,6 +18,7 @@ const mockSnapshot: ProviderSnapshot = {
   provider: "codex",
   displayName: "CODEX",
   plan: "PRO",
+  quotaHistoryScope: null,
   shortWindow: { remainingPercent: 74, resetsAt: new Date(Date.now() + 78 * 60_000).toISOString(), windowSeconds: 18_000 },
   weeklyWindow: { remainingPercent: 42, resetsAt: new Date(Date.now() + 3.2 * 86_400_000).toISOString(), windowSeconds: 604_800 },
   resetCredits: 1,
@@ -69,7 +70,7 @@ export async function getPlatformCapabilities(): Promise<PlatformCapabilities> {
 }
 
 export async function getAppVersion(): Promise<string> {
-  if (!isTauri()) return "1.0.0";
+  if (!isTauri()) return "1.1.0";
   const { getVersion } = await import("@tauri-apps/api/app");
   return getVersion();
 }
@@ -120,7 +121,7 @@ export async function syncWidgetAppearance(appearance: "light" | "dark"): Promis
 
 export async function selectSkin(id: string): Promise<WidgetPreferences> {
   if (!isTauri()) {
-    const selectedSkin = id === "computer" || id === "glass" ? id : "glass";
+    const selectedSkin = id === "computer" || id === "glass" || id === "walkman" ? id : "glass";
     return { ...defaultPreferences, selectedSkin };
   }
   const { invoke } = await import("@tauri-apps/api/core");

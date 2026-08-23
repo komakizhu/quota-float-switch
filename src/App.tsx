@@ -7,7 +7,7 @@ import { copy, normalizeLanguage } from "./lib/i18n";
 import { mergeSnapshots } from "./lib/snapshots";
 import { DESKTOP_PALETTES } from "./lib/desktopPalette";
 import { normalizeGlassStyle } from "./lib/glass";
-import { calculateQuotaPrediction, loadQuotaHistory, quotaHistoryKey, recordQuotaSample, saveQuotaHistory, type QuotaHistory } from "./lib/quotaPrediction";
+import { assignLegacyQuotaHistoryToScope, calculateQuotaPrediction, loadQuotaHistory, quotaHistoryKey, recordQuotaSample, saveQuotaHistory, type QuotaHistory, type QuotaPrediction } from "./lib/quotaPrediction";
 import type { ResizeEdge } from "./lib/resize";
 import type { CustomSkinAsset, PlatformCapabilities, ProviderSnapshot, ToggleCorner, WidgetMode, WidgetPreferences, WidgetSize, WidgetSkin, WidgetTheme } from "./types";
 
@@ -18,11 +18,23 @@ const COMPACT_MIN_SIZE = 48;
 const COMPACT_MAX_SIZE = 144;
 const EXPANDED_MIN_SIZE = 220;
 const EXPANDED_MAX_SIZE = 460;
+const WALKMAN_CARD_SHELL_BASE_PERCENT = 62;
+const WALKMAN_CARD_SHELL_MIN_PERCENT = 56;
+const WALKMAN_CARD_SHELL_MAX_PERCENT = 84;
 const PRESET_FACTOR: Record<Exclude<WidgetSize, "custom">, number> = { small: 0.84, medium: 1, large: 1.16 };
+const WEEKLY_WINDOW_SECONDS = 604800;
+const EMPTY_QUOTA_PREDICTION: QuotaPrediction = {
+  historyDays: 0,
+  averageDailyUsagePercent: null,
+  daysAtAverage: null,
+  daysUntilReset: null,
+  recommendedDailyPercent: null,
+};
 const INITIAL_SNAPSHOT: ProviderSnapshot = {
   provider: "codex",
   displayName: "CODEX",
   plan: null,
+  quotaHistoryScope: null,
   shortWindow: null,
   weeklyWindow: null,
   resetCredits: null,
@@ -31,6 +43,12 @@ const INITIAL_SNAPSHOT: ProviderSnapshot = {
   status: "unavailable",
   message: "Quota is loading.",
 };
+
+function forecastWindowFor(snapshot: ProviderSnapshot) {
+  return snapshot.weeklyWindow?.windowSeconds === WEEKLY_WINDOW_SECONDS
+    ? snapshot.weeklyWindow
+    : snapshot.shortWindow;
+}
 
 export default function App() {
   const [snapshots, setSnapshots] = useState<ProviderSnapshot[]>([]);
@@ -64,7 +82,7 @@ export default function App() {
     openSettingsFailed: "Could not open Settings.",
   };
   const theme: WidgetTheme = preferences.appearance === "system" ? (systemDark ? "dark" : "light") : preferences.appearance;
-  const skin: WidgetSkin = preferences.selectedSkin === "computer" || preferences.selectedSkin === "glass"
+  const skin: WidgetSkin = preferences.selectedSkin === "computer" || preferences.selectedSkin === "glass" || preferences.selectedSkin === "walkman"
     ? preferences.selectedSkin
     : "default";
   const selectedCustomSkin = preferences.selectedSkin.startsWith("custom:")
@@ -124,7 +142,7 @@ export default function App() {
       failures.current += 1;
       setSnapshots((current) => current.length > 0
         ? current.map((item) => ({ ...item, status: "stale", message: "Refresh failed. Please try again later." }))
-        : [{ provider: "codex", displayName: "CODEX", plan: null, shortWindow: null, weeklyWindow: null, resetCredits: null, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "unavailable", message: "Quota is temporarily unavailable. It will retry automatically." }]);
+        : [{ provider: "codex", displayName: "CODEX", plan: null, quotaHistoryScope: null, shortWindow: null, weeklyWindow: null, resetCredits: null, resetCreditExpiresAt: [], updatedAt: new Date().toISOString(), status: "unavailable", message: "Quota is temporarily unavailable. It will retry automatically." }]);
     }
   }, []);
 
@@ -140,7 +158,7 @@ export default function App() {
     const customSkins = Array.isArray(value.customSkins) ? value.customSkins : [];
     const requestedSkin = typeof value.selectedSkin === "string" ? value.selectedSkin : DEFAULT_PREFS.selectedSkin;
     const migratedSkin = requestedSkin === "blur" ? "default" : requestedSkin;
-    const isBuiltinSkin = migratedSkin === "default" || migratedSkin === "computer" || migratedSkin === "glass";
+    const isBuiltinSkin = migratedSkin === "default" || migratedSkin === "computer" || migratedSkin === "glass" || migratedSkin === "walkman";
     const isKnownCustomSkin = migratedSkin.startsWith("custom:")
       && customSkins.some((skin) => skin && typeof skin.id === "string" && `custom:${skin.id}` === migratedSkin);
     const normalized = {
@@ -237,12 +255,14 @@ export default function App() {
         // The weekly window is the useful seven-day series for a forecast. If
         // it is unavailable, the short window still gives the feature a
         // meaningful fallback instead of silently disabling itself.
-        const window = snapshot.weeklyWindow ?? snapshot.shortWindow;
-        if (!window) continue;
+        const window = forecastWindowFor(snapshot);
+        if (!window || !snapshot.quotaHistoryScope) continue;
+        nextHistory = assignLegacyQuotaHistoryToScope(nextHistory, snapshot);
         const key = quotaHistoryKey(snapshot, window);
+        if (!key) continue;
         const nextPercent = clampPercent(window.remainingPercent);
         const day = `${sampledAt.getFullYear()}-${String(sampledAt.getMonth() + 1).padStart(2, "0")}-${String(sampledAt.getDate()).padStart(2, "0")}`;
-        const existing = currentHistory[key]?.find((point) => point.day === day);
+        const existing = nextHistory[key]?.find((point) => point.day === day);
         if (existing && existing.remainingPercent === nextPercent) continue;
         nextHistory = recordQuotaSample(nextHistory, key, nextPercent, sampledAt);
       }
@@ -257,16 +277,19 @@ export default function App() {
     : snapshots[activeIndex % Math.max(1, snapshots.length)] ?? INITIAL_SNAPSHOT;
 
   const primaryPercent = current?.shortWindow?.remainingPercent ?? current?.weeklyWindow?.remainingPercent ?? null;
-  const forecastWindow = current?.weeklyWindow ?? current?.shortWindow;
+  const forecastWindow = current ? forecastWindowFor(current) : null;
   const prediction = useMemo(() => {
     if (!forecastWindow || (current.status !== "ok" && current.status !== "stale")) return null;
+    if (!current.quotaHistoryScope) return EMPTY_QUOTA_PREDICTION;
+    const key = quotaHistoryKey(current, forecastWindow);
+    if (!key) return EMPTY_QUOTA_PREDICTION;
     return calculateQuotaPrediction(
       clampPercent(forecastWindow.remainingPercent),
       forecastWindow.resetsAt,
-      quotaHistory[quotaHistoryKey(current, forecastWindow)] ?? [],
+      quotaHistory[key] ?? [],
     );
   }, [current, forecastWindow, quotaHistory]);
-  const southwestWeeklyPrimary = !preferences.locked && skin !== "computer" && preferences.toggleCorner === "sw" && current?.shortWindow === null && current?.weeklyWindow !== null;
+  const southwestWeeklyPrimary = !preferences.locked && skin !== "computer" && skin !== "walkman" && preferences.toggleCorner === "sw" && current?.shortWindow === null && current?.weeklyWindow !== null;
 
   useEffect(() => {
     // The southwest weekly-primary footer moves the collapse button inside the
@@ -282,7 +305,12 @@ export default function App() {
   // The production widget and design workbench share one explicit palette
   // source. Theme records are independent so light and dark cannot leak into
   // one another through CSS defaults or preview state.
+  const walkmanCardShellPercent = Math.min(
+    WALKMAN_CARD_SHELL_MAX_PERCENT,
+    Math.max(WALKMAN_CARD_SHELL_MIN_PERCENT, WALKMAN_CARD_SHELL_BASE_PERCENT * preferences.compactSize / DEFAULT_COMPACT_SIZE),
+  );
   const cardStyle = {
+    "--walkman-card-shell-width": `${walkmanCardShellPercent}%`,
     ...(paletteName ? DESKTOP_PALETTES[theme][paletteName] : {}),
     ...(selectedCustomSkin && customSkinAsset ? {
       "--custom-skin-image": `url("${customSkinAsset.dataUrl}")`,

@@ -123,7 +123,7 @@ jobs:
           releaseBody: |
             ## What's new
 
-            - Renames the application to Quota Pro and ships version 1.0.0.
+            - Ships Quota Pro 1.1.0 with the Walkman skin and quota forecast improvements.
             - Adds manual compact/expanded switching with free positioning and persistent anchors.
             - Adds independent compact/card sizing, edge and corner resize gestures, and double-click reset.
             - Includes free Glass, Soft Light, and Computer skins plus custom skin import.
@@ -137,5 +137,5 @@ jobs:
 
             Quota Pro remains local-first: it reads the existing Codex Desktop login state only for quota requests and does not upload prompts, chats, raw quota responses, or local credentials.
           releaseDraft: true
-          prerelease: false
+          prerelease: true
           args: ${{ matrix.args }}

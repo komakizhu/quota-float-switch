@@ -51,6 +51,12 @@ describe("widget transitions", () => {
     expect(api.invoke).toHaveBeenCalledWith("select_skin", { id: "glass" });
   });
 
+  it("passes Walkman through the native skin command", async () => {
+    const { selectSkin } = await import("./bridge");
+    await selectSkin("walkman");
+    expect(api.invoke).toHaveBeenCalledWith("select_skin", { id: "walkman" });
+  });
+
   it("passes the requested manual mode and monitor work area to Rust", async () => {
     const { setWidgetMode } = await import("./bridge");
     await setWidgetMode("expanded");
@@ -194,8 +200,7 @@ describe("widget transitions", () => {
     });
 
     previewWidgetResize(96);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(rejectPreview).toBeTypeOf("function");
+    await vi.waitFor(() => expect(rejectPreview).toBeTypeOf("function"));
     const cancellation = cancelWidgetResize();
     await Promise.resolve();
     rejectPreview(new Error("preview failed"));

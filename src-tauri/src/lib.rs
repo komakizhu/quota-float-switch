@@ -231,6 +231,7 @@ struct TrayMenuState {
     skin_default: CheckMenuItem<tauri::Wry>,
     skin_computer: CheckMenuItem<tauri::Wry>,
     skin_glass: CheckMenuItem<tauri::Wry>,
+    skin_walkman: CheckMenuItem<tauri::Wry>,
 }
 
 fn sync_tray_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
@@ -264,6 +265,9 @@ fn sync_tray_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
     let _ = menu
         .skin_glass
         .set_checked(preferences.selected_skin == "glass");
+    let _ = menu
+        .skin_walkman
+        .set_checked(preferences.selected_skin == "walkman");
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4001,24 +4005,31 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let theme_dark = CheckMenuItem::with_id(app, "theme-dark", "Dark", true, false, None::<&str>)?;
     let theme_light =
         CheckMenuItem::with_id(app, "theme-light", "Light", true, false, None::<&str>)?;
-    let appearance = Submenu::with_items(
-        app,
-        "Appearance / 外观",
-        true,
-        &[&theme_system, &theme_dark, &theme_light],
-    )?;
     let skin_default =
         CheckMenuItem::with_id(app, "skin-default", "Soft Light", true, false, None::<&str>)?;
     let skin_computer =
         CheckMenuItem::with_id(app, "skin-computer", "Computer", true, false, None::<&str>)?;
     let skin_glass = CheckMenuItem::with_id(app, "skin-glass", "Glass", true, false, None::<&str>)?;
+    let skin_walkman = CheckMenuItem::with_id(
+        app,
+        "skin-walkman",
+        "Sony Walkman",
+        true,
+        false,
+        None::<&str>,
+    )?;
     let skins = Submenu::with_items(
         app,
         "Skins / 皮肤",
         true,
-        &[&skin_default, &skin_computer, &skin_glass],
+        &[&skin_glass, &skin_default, &skin_computer, &skin_walkman],
     )?;
-    let theme = Submenu::with_items(app, "Theme / 主题", true, &[&appearance, &skins])?;
+    let theme = Submenu::with_items(
+        app,
+        "Theme / 主题",
+        true,
+        &[&skins, &theme_system, &theme_dark, &theme_light],
+    )?;
     let (autostart_enabled, autostart_available) = {
         let manager = app.autolaunch();
         match read_launch_at_login(manager.inner()) {
@@ -4090,6 +4101,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let _ = skin_default.set_checked(initial_selected_skin == "default");
     let _ = skin_computer.set_checked(initial_selected_skin == "computer");
     let _ = skin_glass.set_checked(initial_selected_skin == "glass");
+    let _ = skin_walkman.set_checked(initial_selected_skin == "walkman");
     let _ = theme_system.set_checked(initial_appearance == "system");
     let _ = theme_dark.set_checked(initial_appearance == "dark");
     let _ = theme_light.set_checked(initial_appearance == "light");
@@ -4106,7 +4118,6 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         let _ = size_large.set_text("大");
         let _ = language.set_text("Switch to English");
         let _ = theme.set_text("主题");
-        let _ = appearance.set_text("外观");
         let _ = theme_system.set_text("跟随系统");
         let _ = theme_dark.set_text("深色");
         let _ = theme_light.set_text("浅色");
@@ -4114,12 +4125,12 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         let _ = skin_default.set_text("柔光");
         let _ = skin_computer.set_text("电脑");
         let _ = skin_glass.set_text("默认");
+        let _ = skin_walkman.set_text("Sony Walkman");
         let _ = autostart.set_text("开机启动");
         let _ = quit.set_text("退出");
     }
     if initial_language == "en" {
         let _ = theme.set_text("Theme");
-        let _ = appearance.set_text("Appearance");
         let _ = theme_system.set_text("Follow system");
         let _ = theme_dark.set_text("Dark");
         let _ = theme_light.set_text("Light");
@@ -4127,6 +4138,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         let _ = skin_default.set_text("Soft Light");
         let _ = skin_computer.set_text("Computer");
         let _ = skin_glass.set_text("Default");
+        let _ = skin_walkman.set_text("Sony Walkman");
         let _ = widget_size.set_text("Widget size");
         let _ = size_small.set_text("Small");
         let _ = size_medium.set_text("Medium");
@@ -4164,6 +4176,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let skin_default_menu = skin_default.clone();
     let skin_computer_menu = skin_computer.clone();
     let skin_glass_menu = skin_glass.clone();
+    let skin_walkman_menu = skin_walkman.clone();
     let autostart_menu = autostart.clone();
     #[cfg(debug_assertions)]
     let test_short_window_menu = test_short_window.clone();
@@ -4174,7 +4187,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     eprintln!("failed to open settings from tray menu: {error}");
                 }
             }
-            "skin-default" | "skin-computer" | "skin-glass" => {
+            "skin-default" | "skin-computer" | "skin-glass" | "skin-walkman" => {
                 let requested_skin = event.id.as_ref().trim_start_matches("skin-");
                 if let Some(state) = app.try_state::<AppState>() {
                     if let Ok(mut preferences) = state.preferences.lock() {
@@ -4189,6 +4202,8 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                                 .set_checked(normalized.selected_skin == "computer");
                             let _ =
                                 skin_glass_menu.set_checked(normalized.selected_skin == "glass");
+                            let _ = skin_walkman_menu
+                                .set_checked(normalized.selected_skin == "walkman");
                             emit_preferences_changed(app, &normalized);
                         }
                     }
@@ -4266,6 +4281,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         skin_default,
         skin_computer,
         skin_glass,
+        skin_walkman,
     });
     Ok(())
 }
