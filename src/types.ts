@@ -61,6 +61,7 @@ export interface WidgetPreferences {
   pinnedProvider: ProviderId | null;
   autoRotateSeconds: number;
   autoCheckUpdates: boolean;
+  showMenuBarIcon: boolean;
   language: Language;
   appearance: AppearancePreference;
   selectedSkin: string;

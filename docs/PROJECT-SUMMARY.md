@@ -17,7 +17,7 @@ Quota Float 是一个 Tauri 2 桌面悬浮窗，用本机 Codex Desktop 登录�
 - 桌面行为：无边框、透明、置顶、可拖动、可锁定鼠标穿透、可托盘显示/隐藏/刷新/解锁/退出。
 - 跨平台构建：同一套前端 UI/动效代码输出 Windows unsigned 包和 macOS Universal unsigned 包。
 - 状态兜底：接口失败时保留上次成功数据并标记 stale；登录失效、限流、接口变形会给安全提示。
-- 偏好保存：锁定状态、置顶状态、固定 provider、轮播间隔、语言写入 Tauri app config 目录，带 `.bak` 备份恢复。
+- 偏好保存：锁定状态、置顶状态、固定 provider、轮播间隔、语言和菜单栏图标显示状态写入 Tauri app config 目录，带 `.bak` 备份恢复。
 - 预留扩展：类型层已有 `codex | claude` provider 结构，但当前只启用 Codex。
 
 ## 关键文件

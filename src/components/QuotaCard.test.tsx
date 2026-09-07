@@ -36,6 +36,7 @@ const preferences: WidgetPreferences = {
   pinnedProvider: null,
   autoRotateSeconds: 12,
   autoCheckUpdates: true,
+  showMenuBarIcon: true,
   language: "en",
   appearance: "light",
   selectedSkin: "default",

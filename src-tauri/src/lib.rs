@@ -235,6 +235,9 @@ struct TrayMenuState {
 }
 
 fn sync_tray_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_visible(preferences.show_menu_bar_icon);
+    }
     let Some(menu) = app.try_state::<TrayMenuState>() else {
         return;
     };
@@ -4098,6 +4101,16 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 .map(|prefs| prefs.widget_size.clone())
         })
         .unwrap_or_else(|| "medium".into());
+    let initial_show_menu_bar_icon = app
+        .try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .preferences
+                .lock()
+                .ok()
+                .map(|prefs| prefs.show_menu_bar_icon)
+        })
+        .unwrap_or(true);
     let _ = skin_default.set_checked(initial_selected_skin == "default");
     let _ = skin_computer.set_checked(initial_selected_skin == "computer");
     let _ = skin_glass.set_checked(initial_selected_skin == "glass");
@@ -4180,7 +4193,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let autostart_menu = autostart.clone();
     #[cfg(debug_assertions)]
     let test_short_window_menu = test_short_window.clone();
-    builder
+    let tray_icon = builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
             id if settings_menu_route(id) == Some(SettingsMenuRoute::Tray) => {
                 if let Err(error) = show_settings_window(app) {
@@ -4270,6 +4283,9 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
+    if let Err(error) = tray_icon.set_visible(initial_show_menu_bar_icon) {
+        eprintln!("failed to apply menu bar icon visibility: {error}");
+    }
     app.manage(TrayMenuState {
         autostart,
         size_small,

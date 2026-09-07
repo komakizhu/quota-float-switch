@@ -16,6 +16,7 @@ const basePreferences: WidgetPreferences = {
   pinnedProvider: null,
   autoRotateSeconds: 12,
   autoCheckUpdates: true,
+  showMenuBarIcon: true,
   language: "en",
   appearance: "system",
   selectedSkin: "default",
@@ -109,6 +110,7 @@ describe("SettingsPanel live controls", () => {
     ]);
     expect(screen.getByRole("combobox", { name: "Language" })).toHaveValue("en");
     expect(screen.getByRole("checkbox", { name: "Launch at login" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Show menu bar icon" })).toBeChecked();
     expect(screen.getByRole("spinbutton", { name: "Auto-rotation interval" })).toHaveValue(12);
 
     fireEvent.click(screen.getByRole("button", { name: "Widget" }));
@@ -152,6 +154,8 @@ describe("SettingsPanel live controls", () => {
 
     fireEvent.change(screen.getByRole("spinbutton", { name: "Auto-rotation interval" }), { target: { value: "20" } });
     await waitFor(() => expect(bridge.updatePreferences).toHaveBeenCalledWith(expect.objectContaining({ autoRotateSeconds: 20 })));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show menu bar icon" }));
+    await waitFor(() => expect(bridge.updatePreferences).toHaveBeenCalledWith(expect.objectContaining({ showMenuBarIcon: false })));
     fireEvent.click(screen.getByRole("checkbox", { name: "Launch at login" }));
     await waitFor(() => expect(bridge.setLaunchAtLogin).toHaveBeenCalledWith(true));
 

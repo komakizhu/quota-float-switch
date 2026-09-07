@@ -11,7 +11,7 @@ import { assignLegacyQuotaHistoryToScope, calculateQuotaPrediction, loadQuotaHis
 import type { ResizeEdge } from "./lib/resize";
 import type { CustomSkinAsset, PlatformCapabilities, ProviderSnapshot, ToggleCorner, WidgetMode, WidgetPreferences, WidgetSize, WidgetSkin, WidgetTheme } from "./types";
 
-const DEFAULT_PREFS: WidgetPreferences = { locked: false, alwaysOnTop: true, widgetMode: "compact", widgetSize: "medium", compactSize: 72, expandedSize: 306, toggleCorner: "ne", pinnedProvider: null, autoRotateSeconds: 12, autoCheckUpdates: true, language: "zh-CN", appearance: "light", selectedSkin: "glass", glassStyle: "dock", customSkins: [] };
+const DEFAULT_PREFS: WidgetPreferences = { locked: false, alwaysOnTop: true, widgetMode: "compact", widgetSize: "medium", compactSize: 72, expandedSize: 306, toggleCorner: "ne", pinnedProvider: null, autoRotateSeconds: 12, autoCheckUpdates: true, showMenuBarIcon: true, language: "zh-CN", appearance: "light", selectedSkin: "glass", glassStyle: "dock", customSkins: [] };
 const DEFAULT_COMPACT_SIZE = 72;
 const DEFAULT_EXPANDED_SIZE = 306;
 const COMPACT_MIN_SIZE = 48;
@@ -167,6 +167,7 @@ export default function App() {
       widgetMode: value.widgetMode === "expanded" || value.widgetMode === "compact" ? value.widgetMode : (value.stayExpanded ? "expanded" : "compact"),
       widgetSize,
       autoCheckUpdates: typeof value.autoCheckUpdates === "boolean" ? value.autoCheckUpdates : true,
+      showMenuBarIcon: typeof value.showMenuBarIcon === "boolean" ? value.showMenuBarIcon : true,
       compactSize: Math.min(COMPACT_MAX_SIZE, Math.max(COMPACT_MIN_SIZE, compactSize)),
       expandedSize: Math.min(EXPANDED_MAX_SIZE, Math.max(EXPANDED_MIN_SIZE, expandedSize)),
       toggleCorner: (value.toggleCorner === "nw" || value.toggleCorner === "ne" || value.toggleCorner === "sw" || value.toggleCorner === "se" ? value.toggleCorner : "ne") as ToggleCorner,

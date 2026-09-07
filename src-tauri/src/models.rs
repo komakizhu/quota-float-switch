@@ -86,6 +86,8 @@ pub struct WidgetPreferences {
     pub auto_rotate_seconds: u64,
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
+    #[serde(default = "default_show_menu_bar_icon")]
+    pub show_menu_bar_icon: bool,
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default = "default_appearance")]
@@ -107,6 +109,9 @@ fn default_language() -> String {
     "zh-CN".into()
 }
 fn default_auto_check_updates() -> bool {
+    true
+}
+fn default_show_menu_bar_icon() -> bool {
     true
 }
 fn default_appearance() -> String {
@@ -183,6 +188,7 @@ impl Default for WidgetPreferences {
             pinned_provider: None,
             auto_rotate_seconds: 12,
             auto_check_updates: default_auto_check_updates(),
+            show_menu_bar_icon: default_show_menu_bar_icon(),
             language: default_language(),
             appearance: default_appearance(),
             selected_skin: default_skin(),
@@ -303,6 +309,20 @@ mod tests {
                     .expect("legacy preferences should deserialize");
             assert_eq!(parsed.normalized().selected_skin, selected_skin);
         }
+    }
+
+    #[test]
+    fn menu_bar_icon_is_visible_by_default_and_can_be_hidden() {
+        let parsed: WidgetPreferences =
+            serde_json::from_value(legacy_preferences("glass")).unwrap();
+        assert!(parsed.normalized().show_menu_bar_icon);
+
+        let mut raw = legacy_preferences("glass");
+        raw.as_object_mut()
+            .expect("test fixture should be an object")
+            .insert("showMenuBarIcon".into(), json!(false));
+        let parsed: WidgetPreferences = serde_json::from_value(raw).unwrap();
+        assert!(!parsed.normalized().show_menu_bar_icon);
     }
 
     #[test]

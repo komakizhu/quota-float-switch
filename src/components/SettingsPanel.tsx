@@ -33,6 +33,7 @@ const DEFAULT_PREFERENCES: WidgetPreferences = {
   pinnedProvider: null,
   autoRotateSeconds: 12,
   autoCheckUpdates: true,
+  showMenuBarIcon: true,
   language: "en",
   appearance: "system",
   selectedSkin: "glass",
@@ -54,6 +55,8 @@ const localized = {
     chinese: "简体中文",
     launch: "Launch at login",
     launchHint: "Open Quota Pro automatically when you sign in.",
+    menuBarIcon: "Show menu bar icon",
+    menuBarIconHint: "Keep the Quota Pro icon in the menu bar for quick access.",
     rotation: "Auto-rotation interval",
     seconds: "seconds",
     version: "Current version",
@@ -110,6 +113,8 @@ const localized = {
     chinese: "简体中文",
     launch: "登录时启动",
     launchHint: "登录系统后自动打开 Quota Pro。",
+    menuBarIcon: "显示菜单栏图标",
+    menuBarIconHint: "在菜单栏保留 Quota Pro 图标，方便快速打开。",
     rotation: "自动轮换间隔",
     seconds: "秒",
     version: "当前版本",
@@ -372,7 +377,7 @@ export function SettingsPanel() {
     }
   };
 
-  const applyPreferences = useCallback(async (patch: Partial<Pick<WidgetPreferences, "language" | "autoRotateSeconds" | "autoCheckUpdates" | "appearance" | "glassStyle">>) => {
+  const applyPreferences = useCallback(async (patch: Partial<Pick<WidgetPreferences, "language" | "autoRotateSeconds" | "autoCheckUpdates" | "showMenuBarIcon" | "appearance" | "glassStyle">>) => {
     const epoch = ++preferenceWriteEpoch.current;
     const optimistic = { ...preferencesRef.current, ...patch };
     preferencesRef.current = optimistic;
@@ -546,6 +551,7 @@ export function SettingsPanel() {
             setFeedback({ kind: "error", message: errorMessage(error, t.failed) });
           });
         }} /></label>
+        <label className="settings-row settings-row--switch"><span><strong>{t.menuBarIcon}</strong><small>{t.menuBarIconHint}</small></span><input disabled={!ready} type="checkbox" aria-label={t.menuBarIcon} checked={preferences.showMenuBarIcon} onChange={(event) => void applyPreferences({ showMenuBarIcon: event.currentTarget.checked })} /></label>
         <label className="settings-row"><span>{t.rotation}</span><span className="settings-number"><input disabled={!ready} type="number" min={5} max={300} aria-label={t.rotation} value={preferences.autoRotateSeconds} onChange={(event) => void applyPreferences({ autoRotateSeconds: clamp(Number(event.target.value), 5, 300) })} /><small>{t.seconds}</small></span></label>
       </div> : null}
 
