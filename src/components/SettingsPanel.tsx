@@ -180,6 +180,7 @@ function normalizeReceivedPreferences(value: Partial<WidgetPreferences> & { glas
     ...DEFAULT_PREFERENCES,
     ...value,
     autoCheckUpdates: typeof value.autoCheckUpdates === "boolean" ? value.autoCheckUpdates : true,
+    showMenuBarIcon: typeof value.showMenuBarIcon === "boolean" ? value.showMenuBarIcon : true,
     glassStyle: normalizeGlassStyle(value),
     customSkins: value.customSkins ?? [],
   };
