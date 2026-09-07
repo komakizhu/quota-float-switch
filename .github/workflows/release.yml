@@ -123,13 +123,9 @@ jobs:
           releaseBody: |
             ## What's new
 
-            - Ships Quota Pro 1.1.0 with the Walkman skin and quota forecast improvements.
-            - Adds manual compact/expanded switching with free positioning and persistent anchors.
-            - Adds independent compact/card sizing, edge and corner resize gestures, and double-click reset.
-            - Includes free Glass, Soft Light, and Computer skins plus custom skin import.
-            - Adds transparent, Dock Glass, and Liquid Glass material modes where supported.
-            - Keeps weekly quota visible when the 5-hour window is unavailable, with a clear `W` badge.
-            - Improves macOS text rendering, resize stability, localized settings, and automatic update checks.
+            - Ships Quota Pro 1.1.1 with an optional menu bar icon visibility setting in Settings → General.
+            - Keeps the menu bar icon visible by default while persisting the user's choice across launches.
+            - Rolls back the saved preference if the native menu bar visibility update fails.
 
             ![Quota Pro weekly quota fallback](https://raw.githubusercontent.com/komakizhu/Quota-Pro/main/docs/images/quota-v0.1.4-weekly-fallback.png)
 
