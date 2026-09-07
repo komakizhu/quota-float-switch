@@ -235,9 +235,6 @@ struct TrayMenuState {
 }
 
 fn sync_tray_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
-    if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_visible(preferences.show_menu_bar_icon);
-    }
     let Some(menu) = app.try_state::<TrayMenuState>() else {
         return;
     };
@@ -271,6 +268,14 @@ fn sync_tray_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
     let _ = menu
         .skin_walkman
         .set_checked(preferences.selected_skin == "walkman");
+}
+
+fn set_tray_visibility(app: &AppHandle, visible: bool) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id("main") else {
+        return Ok(());
+    };
+    tray.set_visible(visible)
+        .map_err(|error| format!("failed to set menu bar icon visibility: {error}"))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3375,6 +3380,14 @@ fn set_preferences(
     let current = preferences_lock(&state).clone();
     let preferences = renderer_preferences(&current, preferences);
     persist_preferences(&state.preferences_path, &preferences)?;
+    if current.show_menu_bar_icon != preferences.show_menu_bar_icon {
+        if let Err(error) = set_tray_visibility(&app, preferences.show_menu_bar_icon) {
+            if let Err(rollback_error) = persist_preferences(&state.preferences_path, &current) {
+                eprintln!("failed to roll back menu bar icon preference: {rollback_error}");
+            }
+            return Err(error);
+        }
+    }
     *preferences_lock(&state) = preferences.clone();
     if let Some(window) = app.get_webview_window("widget") {
         sync_native_glass_material(&window, &preferences);
@@ -4193,7 +4206,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let autostart_menu = autostart.clone();
     #[cfg(debug_assertions)]
     let test_short_window_menu = test_short_window.clone();
-    let tray_icon = builder
+    builder
         .on_menu_event(move |app, event| match event.id.as_ref() {
             id if settings_menu_route(id) == Some(SettingsMenuRoute::Tray) => {
                 if let Err(error) = show_settings_window(app) {
@@ -4283,7 +4296,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
-    if let Err(error) = tray_icon.set_visible(initial_show_menu_bar_icon) {
+    if let Err(error) = set_tray_visibility(app.handle(), initial_show_menu_bar_icon) {
         eprintln!("failed to apply menu bar icon visibility: {error}");
     }
     app.manage(TrayMenuState {
